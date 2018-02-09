@@ -131,6 +131,14 @@ message PluginCapability {
       // attempt to invoke the REQUIRED ControllerService RPCs, as well
       // as specific RPCs as indicated by ControllerGetCapabilities.
       CONTROLLER_SERVICE = 1;
+
+      // ACCESSIBILITY_CONSTRAINTS indicates that the volumes for this
+      // plugin may not be equally accessible by all nodes in the
+      // cluster. The CO SHOULD use the topology information returned by
+      // CreateVolumeRequest along with the topology information
+      // returned by NodeGetId to ensure that a given volume is
+      // accessible from a given node when scheduling workloads.
+      ACCESSIBILITY_CONSTRAINTS = 2;
     }
   }
 
@@ -194,6 +202,19 @@ message CreateVolumeRequest {
   // sensitive and MUST be treated as such (not logged, etc.) by the CO.
   // This field is OPTIONAL.
   map<string, string> controller_create_credentials = 6;
+
+  // If an SP has the ACCESSIBILITY_CONSTRAINTS, a CO may the
+  // topological segment(s) the provisioned volume MUST be
+  // accessible from.
+  // A topological segment is a sub-division of a cluster, like region,
+  // zone, rack, etc.
+  // An SP SHALL advertise the requirements for topology in
+  // documentation. COs SHALL permit passing through topological
+  // information.
+  // This field is OPTIONAL. If it is not specified, the SP MAY choose
+  // the topological segment(s) the provisioned volume is accessible
+  // from.
+  TopologyRequirement accessible_from = 7;
 }
 
 message CreateVolumeResponse {
@@ -301,6 +322,205 @@ message Volume {
   // the same attributes. This field is OPTIONAL and when present MUST
   // be passed to volume validation and publishing calls.
   map<string,string> attributes = 3;
+
+  // The topological segment(s) the provisioned volume is accessible
+  // from. A topological segment is a sub-division of a cluster, like
+  // region, zone, rack, etc.
+  // A plugin that returns this field must also set the
+  // ACCESSIBILITY_CONSTRAINTS plugin capability.
+  // Each key must be 63 characters or less and consist of alphanumeric
+  // characters, '-', '_' or '.'. Keys MUST be case-insensitive. Meaning
+  // the keys "Zone" and "zone" MUST not both exist.
+  // Each value MUST contain 1 or more strings. Each string MUST be 63
+  // characters or less and begin and end with an alphanumeric character
+  // with '-', '_', '.', or alphanumerics in between.
+  // A value containing more than 1 string indicates the volume is
+  // accessible from multiple topological segments.
+  // COs may use this information along with the topology information
+  // returned by NodeGetId to ensure that a given volume is accessible
+  // from a given node when scheduling workloads.
+  // This field is OPTIONAL. If it is not specified, the CO MAY assume
+  // the volume is equally accessible from all nodes in the cluster and
+  // may schedule workloads referencing the volume on any available
+  // node.
+  //
+  // Example 1:
+  // Given a volume that is accessible from a single zone, and
+  // accessible_from =
+  //   {"region":{"us-west1"}, "zone":{"us-west1-b"}}
+  // Indicates the volume is accessible only from the "region"
+  // "us-west1" and the "zone" "us-west1-b".
+  //
+  // Example 2:
+  // Given a volume that is accessible from two zones, and
+  // accessible_from =
+  //   {"region": {"us-west1"}, "zone": {"us-west1-b", "us-west1-c"}}
+  // Indicates the volume is accessible from both "zone" "us-west1-b"
+  // and "zone" "us-west1-c" the "region" "us-west1".
+  map<string, ListOfString> accessible_from = 4;
+}
+
+// TopologyRequirement captures the topological segment(s) the CO wants
+// a volume to be provisioned in.
+message TopologyRequirement {
+  // The topological segment(s) the provisioned volume MUST be
+  // accessible from.
+  // A topological segment is a sub-division of a cluster, like region,
+  // zone, rack, etc.
+  // Each key MUST be 63 characters or less and consist of alphanumeric
+  // characters, '-', '_' or '.'. Keys MUST be case-insensitive. Meaning
+  // the keys "Zone" and "zone" MUST not both exist.
+  // Each value MUST contain 1 or more strings. Each string MUST be 63
+  // characters or less and begin and end with an alphanumeric character
+  // with '-', '_', '.', or alphanumerics in between.
+  // A value containing more than 1 string indicates a set of
+  // possibilities that the SP may choose from.
+  // An SP SHALL advertise the requirements for topology in
+  // documentation. COs SHALL permit passing through topological
+  // information.
+  // This field is OPTIONAL. If it is not specified, the SP MAY choose
+  // the topological segment(s) the provisioned volume is accessible
+  // from.
+  //
+  // Example 1:
+  // Given a volume that is accessible from a single zone, and
+  // accepted =
+  //   {"region": {"us-west1"}, "zone": {"us-west1-b"}}
+  // Indicates the volume MUST be accessible from the "region"
+  // "us-west1" and the "zone" "us-west1-b".
+  //
+  // Example 2:
+  // Given a volume that is accessible from a single zone, and
+  // accepted =
+  //   { "region": {"us-west1"}, "zone": {"us-west1-b", "us-west1-c"}}
+  // Indicates the volume may be provisioned in either the "zone"
+  // "us-west1-b" or the "zone" "us-west1-c" in the "region" "us-west1".
+  //
+  // Example 3:
+  // Given a volume that is accessible from two zones (which may be
+  // indicated via an opaque parameter if the SP supports both single
+  // and multi-zone volumes), and
+  // accepted =
+  //   {"region": {"us-west1"}, "zone": {"us-west1-b", "us-west1-c"}}
+  // Indicates the volume MUST be accessible from the "region"
+  // "us-west1" and both "zone" "us-west1-b" and "zone" "us-west1-c".
+  //
+  // Example 4:
+  // Given a volume that is accessible from two zones (which may be
+  // indicated via an opaque parameter if the SP supports both single
+  // and multi-zone volumes), and
+  // accepted =
+  //   {"region": {"us-west1"},
+  //    "zone": {"us-west1-b", "us-west1-c", "us-west1-d"}}
+  // Indicates the volume may be accessible from any combination of two
+  // "zones" in the "region" "us-west1": e.g. "us-west1-b" and
+  // "us-west1-c" or "us-west1-b" and "us-west1-d", etc.
+  //
+  // Example 5:
+  // Given a volume that is accessible from a single site/zone/rack, and
+  // accepted =
+  //   {"site": {"S1"}, "zone": {"Z1"}, "rack": {"R1"}}
+  // Indicates the volume MUST be accessible from the "site" "S1", the
+  // the "zone" "Z1", and the "rack" "R1".
+  //
+  // Example 6:
+  // Given a volume that is accessible from a single site/zone/rack, and
+  // accepted =
+  //   {"site": {"S1"}, "zone": {"Z1"}, "rack": {"R1", "R2"}}
+  // Indicates the volume MUST be accessible from either "rack" "R1" or
+  // "R2" in "zone" "Z1" in "site" "S1".
+  //
+  // Example 7:
+  // Given a volume that is accessible from a single site/zone/rack, and
+  // accepted =
+  //   {"site": {"S1"}, "zone": {"Z1", "Z2"}, "rack": {"R1", "R2"}}
+  // Indicates the volume MUST be accessible from either "rack" "R1" or
+  // "R2" in either "zone" "Z1" or "Z2" in the "site" "S1".
+  map<string, ListOfString> accepted = 1;
+
+  // If a CO specifies multiple values for a topological segment, it may
+  // also specify one or more preferred values.  An SP SHOULD attempt
+  // to fullfil the provisioning request using the preferred value(s) in
+  // order from first to last and only use the the other
+  // accepted topologies values if it is not possible to fulfill the
+  // CreateVolume request with the preferred value(s).
+  // Each key MUST also be present in accepted topologies.
+  // Each value MUST be present in the list of values for the
+  // corresponding key in accepted topologies.
+  // This field is OPTIONAL. If it is not specified, the SP MAY choose
+  // from any of the set of possible values specified in
+  // accepted topologies.
+  //
+  // Example 1:
+  // Given a volume that is accessible from a single zone, and
+  // accepted =
+  //   {"region": {"us-west1"}, "zone": {"us-west1-b", "us-west1-c"}}
+  // preferred =
+  //   {"zone": {"us-west1-c"}}
+  // Indicates the SP SHOULD first attempt to provision the volume as
+  // accessible from "zone" "us-west1-c" in the "region" "us-west1" and
+  // fall back to "zone" "us-west1-b" in the "region" "us-west1" if that
+  // is not possible.
+  //
+  // Example 2:
+  // Given a volume that is accessible from a single zone, and
+  // accepted =
+  //   {"region": {"us-west1"},
+  //   "zone": {"us-west1-b", "us-west1-c", "us-west1-d", "us-west1-e"}}
+  // preferred =
+  //   {"zone": {"us-west1-d", "us-west1-b"}}
+  // Indicates the SP SHOULD first attempt to provision the volume as
+  // accessible from "zone" "us-west1-d" in the "region" "us-west1" and
+  // fall back to "zone" "us-west1-b" in the "region" "us-west1" if that
+  // is not possible. If that is not possible, the SP may choose between
+  // either the "zone" "us-west1-c" or "us-west1-e" in the "region"
+  // "us-west1".
+  //
+  // Example 3:
+  // Given a volume that is accessible from two zones (which may be
+  // indicated via an opaque parameter if the SP supports both single
+  // and multi-zone volumes), and
+  // accepted =
+  //   {"region": {"us-west1"},
+  //   "zone": {"us-west1-b", "us-west1-c", "us-west1-d", "us-west1-e"}}
+  // preferred =
+  //   {"zone": {"us-west1-e", "us-west1-c"}}
+  // Indicates the SP SHOULD first attempt to provision the volume as
+  // accessible from the combination of the two "zones" "us-west1-c" and
+  // "us-west1-e" in the "region" "us-west1" and fall back to other
+  // combinations if that is not possible.
+  //
+  // Example 4:
+  // Given a volume that is accessible from a single site/zone/rack, and
+  // accepted =
+  //   {"site": {"S1"}, "zone": {"Z1"}, "rack": {"R1", "R2"}}
+  // preferred =
+  //   {"rack": {"R2"}}
+  // Indicates the SP SHOULD first attempt to provision the volume as
+  // accessible from "rack" "R2", in "zone" "Z1" and "site" "S1". If
+  // that is not possible, the SP may provision the volume as
+  // accessible from "rack" "R1", in "zone" "Z1" and "site" "S1".
+  //
+  // Example 5:
+  // Given a volume that is accessible from a single site/zone/rack, and
+  // accepted =
+  //   {"site": {"S1"}, "zone": {"Z1", "Z2"}, "rack": {"R1", "R2"}}
+  // preferred =
+  //   {"zone": {"Z2"}, "rack": {"R2"}}
+  // Indicates the SP SHOULD first attempt to provision the volume as
+  // accessible from "rack" "R2", in "zone" "Z2" and "site" "S1". If
+  // that is not possible, the SP SHOULD attempt to provision the volume
+  // as accessible from "rack" "R1", in "zone" "Z2" and "site" "S1". If
+  // that is not possible, the SP SHOULD attempt to provision the volume
+  // as accessible from "rack" "R2", in "zone" "Z1" and "site" "S1". If
+  // that is not possible, the SP SHOULD attempt to provision the volume
+  // as accessible from "rack" "R1", in "zone" "Z1" and "site" "S1".
+  map<string, ListOfString> preferred = 2;
+}
+
+// ListOfString is a wrapper around a repeated strings.
+message ListOfString {
+  repeated string value = 1;
 }
 ////////
 ////////
@@ -634,6 +854,34 @@ message NodeGetIdResponse {
   // CO in subsequent `ControllerPublishVolume`.
   // This is a REQUIRED field.
   string node_id = 1;
+
+  // The topological segment(s) this node belongs to. A topological
+  // segment is a sub-division of a cluster, like region, zone, rack,
+  // etc.
+  // A plugin that returns this field must also set the
+  // ACCESSIBILITY_CONSTRAINTS plugin capability.
+  // Each key must be 63 characters or less and consist of alphanumeric
+  // characters, '-', '_' or '.'.
+  // Keys MUST be case-insensitive. Meaning the keys "Zone" and "zone"
+  // MUST not both exist.
+  // Each value MUST be 63 characters or less and begin and end with an
+  // alphanumeric character with '-', '_', '.', or alphanumerics in
+  // between.
+  // COs may use this information along with the topology information
+  // returned in CreateVolumeResponse to ensure that a given volume is
+  // accessible from a given node when scheduling workloads.
+  // This field is OPTIONAL. If it is not specified, the CO MAY assume
+  // the node is not subject to any topological constraint and MAY
+  // schedule workloads that reference any volume V, such that there are
+  // no topological constraints declared for V.
+  //
+  // Example 1:
+  // Given a volume that is accessible from a single zone, and
+  // accessible_from =
+  //   {"region":{"us-west1"}, "zone":{"us-west1-b"}}
+  // Indicates the node exists within the "region" "us-west1" and the
+  // "zone" "us-west1-b".
+  map<string, string> accessible_from = 2;
 }
 ////////
 ////////
