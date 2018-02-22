@@ -722,19 +722,24 @@ message Volume {
   // node.
   //
   // Example 1:
-  //   accessible_topology = {"region": "R1", "zone": "Z2"}
+  //   accessible_topology = ["R1.Z2"]
   // Indicates a volume accessible only from the "region" "R1" and the
   // "zone" "Z2".
   //
   // Example 2:
-  //   accessible_topology =
-  //     {"region": "R1", "zone": "Z2"},
-  //     {"region": "R1", "zone": "Z3"} 
+  //   accessible_topology = ["R1.Z2", "R1.Z3"]
   // Indicates a volume accessible from both "zone" "Z2" and "zone" "Z3"
   // in the "region" "R1".
-  repeated Topology accessible_topology = 4;
+  repeated string accessible_topology = 4;
 }
 
+// TopologyRequirement captures the requirements and preferences of a CO
+// with respect to volume provisioning across the storage topology
+// domains advertised by the SP via NodeGetId. Toplogy domains are
+// represented as opaque strings that SHALL NOT be interpreted by CO
+// implementations. Toplogy domains MAY be hierarchical, overlapping, or
+// else have other relationship among each other. Any relationship among
+// topology domains MUST remain completely opaque to the CO.
 message TopologyRequirement {
   // Specifies the list of topologies the provisioned volume MUST be
   // accessible from.
@@ -753,33 +758,29 @@ message TopologyRequirement {
   // to do so, the SP MUST fail the CreateVolume call.
   // For example, if a volume should be accessible from a single zone,
   // and permitted =
-  //   {"region": "R1", "zone": "Z2"}
+  //   ["R1.Z2"]
   // then the provisioned volume MUST be accessible from the "region"
   // "R1" and the "zone" "Z2".
   // Similarly, if a volume should be accessible from two zones, and
   // permitted =
-  //   {"region": "R1", "zone": "Z2"},
-  //   {"region": "R1", "zone": "Z3"}
-  // then the provisioned volume MUST be accessible from the "region"
-  // "R1" and both "zone" "Z2" and "zone" "Z3".
+  //   ["R1.Z2", "R1.Z3"]
+  // then the provisioned volume MUST be accessible from both "zone"
+  // "Z2" and "zone" "Z3" within "region" "R1".
   //
   // If x<n, than the SP SHALL choose x unique topologies from the list
   // of permitted topologies. If it is unable to do so, the SP MUST fail
   // the CreateVolume call.
   // For example, if a volume should be accessible from a single zone,
   // and permitted =
-  //   {"region": "R1", "zone": "Z2"},
-  //   {"region": "R1", "zone": "Z3"}
+  //   ["R1.Z2", "R1.Z3"]
   // then the SP may choose to make the provisioned volume available in
   // either the "zone" "Z2" or the "zone" "Z3" in the "region" "R1".
   // Similarly, if a volume should be accessible from two zones, and
   // permitted =
-  //   {"region": "R1", "zone": "Z2"},
-  //   {"region": "R1", "zone": "Z3"},
-  //   {"region": "R1", "zone": "Z4"}
+  //   ["R1.Z2", "R1.Z3", "R1.Z4"]
   // then the provisioned volume MUST be accessible from any combination
-  // of two unique topologies: e.g. "R1/Z2" and "R1/Z3", or "R1/Z2" and
-  //  "R1/Z4", or "R1/Z3" and "R1/Z4".
+  // of two unique topologies: e.g. "R1.Z2" and "R1.Z3", or "R1.Z2" and
+  // "R1.Z4", or "R1.Z3" and "R1.Z4".
   //
   // If x>n, than the SP MUST make the provisioned volume available from
   // all topologies from the list of permitted topologies and MAY choose
@@ -788,11 +789,11 @@ message TopologyRequirement {
   // CreateVolume call.
   // For example, if a volume should be accessible from two zones, and
   // permitted =
-  //   {"region": "R1", "zone": "Z2"}
+  //   ["R1.Z2"]
   // then the provisioned volume MUST be accessible from the "region"
-  // "R1" and the "zone" "Z2" and the SP may select the second zone
-  // independently, e.g. "R1/Z4".
-  repeated Topology permitted = 1;
+  // "R1" and the "zone" "Z2" and the SP may select the second topology
+  // independently, e.g. "R1.Z4".
+  repeated string permitted = 1;
 
   // Specifies the list of topologies the CO would prefer the volume to
   // be provisioned in.
@@ -818,10 +819,9 @@ message TopologyRequirement {
   // Example 1:
   // Given a volume should be accessible from a single zone, and
   // permitted =
-  //   {"region": "R1", "zone": "Z2"},
-  //   {"region": "R1", "zone": "Z3"}
+  //   ["R1.Z2", "R1.Z3"]
   // preferred =
-  //   {"region": "R1", "zone": "Z3"}
+  //   ["R1.Z3"]
   // then the the SP SHOULD first attempt to make the provisioned volume
   // available from "zone" "Z3" in the "region" "R1" and fall back to
   // "zone" "Z2" in the "region" "R1" if that is not possible.
@@ -829,13 +829,9 @@ message TopologyRequirement {
   // Example 2:
   // Given a volume should be accessible from a single zone, and
   // permitted =
-  //   {"region": "R1", "zone": "Z2"},
-  //   {"region": "R1", "zone": "Z3"},
-  //   {"region": "R1", "zone": "Z4"},
-  //   {"region": "R1", "zone": "Z5"}
+  //   ["R1.Z2", "R1.Z3", "R1.Z4", "R1.Z5"]
   // preferred =
-  //   {"region": "R1", "zone": "Z4"},
-  //   {"region": "R1", "zone": "Z2"}
+  //   ["R1.Z4", "R1.Z2"]
   // then the the SP SHOULD first attempt to make the provisioned volume
   // accessible from "zone" "Z4" in the "region" "R1" and fall back to
   // "zone" "Z2" in the "region" "R1" if that is not possible. If that
@@ -845,13 +841,9 @@ message TopologyRequirement {
   // Example 3:
   // Given a volume should be accessible from TWO zones, and
   // permitted =
-  //   {"region": "R1", "zone": "Z2"},
-  //   {"region": "R1", "zone": "Z3"},
-  //   {"region": "R1", "zone": "Z4"},
-  //   {"region": "R1", "zone": "Z5"}
+  //   ["R1.Z2", "R1.Z3", "R1.Z4", "R1.Z5"]
   // preferred =
-  //   {"region": "R1", "zone": "Z5"},
-  //   {"region": "R1", "zone": "Z3"}
+  //   ["R1.Z5", "R1.Z3"]
   // then the the SP SHOULD first attempt to make the provisioned volume
   // accessible from the combination of the two "zones" "Z5" and "Z3" in
   // the "region" "R1". If that's not possible, it should fall back to
@@ -860,25 +852,7 @@ message TopologyRequirement {
   // combination of "Z3" and other possibilities from the list of
   // permitted. If that's not possible, it should fall back  to a
   // combination of other possibilities from the list of permitted.
-  repeated Topology preferred = 2;
-}
-
-// Topology is a map of topological domains to topological segments.
-// A topological domain is a sub-division of a cluster, like "region",
-// "zone", "rack", etc.
-// A topological segment is a specific instance of a topological domain,
-// like "zone3", "rack3", etc.
-// For example {"zone": "Z1", "rack": "R3"}
-// Each key (topological domain) must be 63 characters or less and
-// consist of alphanumeric characters, '-', '_' or '.'.
-// Keys MUST be case-insensitive. Meaning the keys "Zone" and "zone"
-// MUST not both exist.
-// Each value (topological segment) MUST contain 1 or more strings.
-// Each string MUST be 63 characters or less and begin and end with an
-// alphanumeric character with '-', '_', '.', or alphanumerics in
-// between.
-message Topology {
-    map<string, string> segments = 1;
+  repeated string preferred = 2;
 }
 ```
 
@@ -1458,7 +1432,8 @@ The CO MUST implement the specified error recovery behavior when it encounters t
 A Node Plugin MUST implement this RPC call if the plugin has `PUBLISH_UNPUBLISH_VOLUME` controller capability.
 The Plugin SHALL assume that this RPC will be executed on the node where the volume will be used.
 The CO SHOULD call this RPC for the node at which it wants to place the workload.
-The result of this call will be used by CO in `ControllerPublishVolume`.
+The `node_id` result of this call will be used by CO in `ControllerPublishVolume`.
+The contents of a successful response to this call SHALL NOT change across subsequent invocations.
 
 ```protobuf
 message NodeGetIdRequest {
@@ -1485,11 +1460,9 @@ message NodeGetIdResponse {
   // no topological constraints declared for V.
   //
   // Example 1:
-  //   accessible_topology =
-  //     {"region": "R1", "zone": "R2"}
-  // Indicates the node exists within the "region" "R1" and the "zone"
-  // "Z2".
-  Topology accessible_topology = 2;
+  //   accessible_topology = ["R1.Z2"]
+  // Indicates the node exists within "zone" "Z2" of the "region" "R1".
+  repeated string accessible_topology = 2;
 }
 ```
 
